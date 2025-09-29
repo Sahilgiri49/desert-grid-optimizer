@@ -1,10 +1,15 @@
+import React, { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from "recharts";
-import { Sun, Wind, Battery, Zap, TrendingUp, AlertTriangle, Settings, Download } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from "recharts";
+import { Sun, Wind, Battery, Zap, TrendingUp, AlertTriangle, Settings, Download, RefreshCw, Loader2, CheckCircle, Info, Gauge } from "lucide-react";
+import { useEnergyData } from "@/hooks/useEnergyData";
+import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 import heroImage from "@/assets/renewable-energy-hero.jpg";
 
 // Mock data for demonstration
@@ -38,6 +43,27 @@ const energyMix = [
 ];
 
 export const EnergyDashboard = () => {
+  const { energyData, alerts, loading, generateNewData } = useEnergyData();
+  const { toast } = useToast();
+  const [isGenerating, setIsGenerating] = useState(false);
+  
+  const handleGenerateData = async () => {
+    setIsGenerating(true);
+    await generateNewData();
+    setIsGenerating(false);
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="flex items-center space-x-2">
+          <Loader2 className="h-6 w-6 animate-spin" />
+          <span>Loading energy data...</span>
+        </div>
+      </div>
+    );
+  }
+
   const currentTime = new Date().toLocaleTimeString();
   
   return (
@@ -67,6 +93,27 @@ export const EnergyDashboard = () => {
 
       {/* Main Dashboard */}
       <div className="container mx-auto px-4 py-8">
+        
+        {/* Control Panel */}
+        <div className="flex justify-between items-center mb-6">
+          <Button 
+            onClick={handleGenerateData}
+            disabled={isGenerating}
+            className="bg-primary hover:bg-primary/90"
+          >
+            {isGenerating ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Generate New Data
+              </>
+            )}
+          </Button>
+        </div>
         
         {/* Key Metrics Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
