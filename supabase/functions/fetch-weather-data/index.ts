@@ -24,52 +24,111 @@ serve(async (req) => {
 
     console.log('Fetching weather and generating energy data...');
 
+    // Get current target load from database
+    const { data: currentLoadData } = await supabaseClient
+      .from('campus_load_data')
+      .select('target_load_kw')
+      .order('timestamp', { ascending: false })
+      .limit(1)
+      .single();
+    
+    const targetCampusLoad = currentLoadData?.target_load_kw || 300;
+
     // Generate realistic solar data based on time of day
     const now = new Date();
     const hour = now.getHours();
     const minute = now.getMinutes();
+    const seconds = now.getSeconds();
+    
+    // Add second-level variations for dynamic updates
+    const timeVariation = (seconds / 60) * 0.1; // 10% variation within each minute
     
     // Solar irradiance simulation (peak at noon, zero at night)
     let solarIrradiance = 0;
     if (hour >= 6 && hour <= 18) {
       const solarAngle = ((hour - 6) + minute / 60) / 12; // 0 to 1 from 6AM to 6PM
       solarIrradiance = Math.sin(solarAngle * Math.PI) * 1000; // Peak 1000 W/m²
-      // Add some randomness
-      solarIrradiance *= (0.8 + Math.random() * 0.4); // ±20% variation
+      // Add randomness and second-level variations
+      solarIrradiance *= (0.8 + Math.random() * 0.4 + timeVariation); // Dynamic variation
     }
 
     // Solar power generation (assuming 500kW installation capacity)
-    const solarPowerGenerated = (solarIrradiance / 1000) * 500 * (0.85 + Math.random() * 0.15); // 85-100% efficiency
+    const solarPowerGenerated = (solarIrradiance / 1000) * 500 * (0.85 + Math.random() * 0.15 + timeVariation);
 
     // Wind simulation (varies throughout day with some randomness)
-    const baseWindSpeed = 3 + Math.sin((hour + minute/60) * Math.PI / 12) * 4 + Math.random() * 3; // 0-10 m/s
+    const baseWindSpeed = 3 + Math.sin((hour + minute/60 + seconds/3600) * Math.PI / 12) * 4 + Math.random() * 3; // 0-10 m/s
     const windDirection = Math.random() * 360;
     
     // Wind power generation (assuming 200kW wind capacity, cut-in at 3 m/s)
     let windPowerGenerated = 0;
     if (baseWindSpeed > 3) {
-      windPowerGenerated = Math.min((baseWindSpeed - 3) / 12 * 200, 200) * (0.7 + Math.random() * 0.3);
+      windPowerGenerated = Math.min((baseWindSpeed - 3) / 12 * 200, 200) * (0.7 + Math.random() * 0.3 + timeVariation);
     }
 
-    // Battery simulation (cycling based on solar availability)
-    const batteryCapacity = 1000; // 1 MWh
-    const currentSoC = Math.max(20, Math.min(95, 50 + Math.sin((hour + minute/60) * Math.PI / 6) * 30)); // 20-95% SoC
+    // INTELLIGENT ENERGY FLOW LOGIC
+    const totalRenewableGeneration = solarPowerGenerated + windPowerGenerated;
     
-    // Battery charge/discharge rate based on energy balance
-    const totalGeneration = solarPowerGenerated + windPowerGenerated;
-    const campusLoad = 300 + Math.sin((hour + minute/60) * Math.PI / 8) * 150 + Math.random() * 50; // 150-500 kW load
+    // Step 1: Renewables power the campus load first
+    const renewableToLoad = Math.min(totalRenewableGeneration, targetCampusLoad);
+    const excessRenewable = Math.max(0, totalRenewableGeneration - targetCampusLoad);
+    const renewableDeficit = Math.max(0, targetCampusLoad - totalRenewableGeneration);
+    
+    // Get current battery state
+    const { data: currentBatteryData } = await supabaseClient
+      .from('battery_data')
+      .select('state_of_charge')
+      .order('timestamp', { ascending: false })
+      .limit(1)
+      .single();
+    
+    const currentSoC = currentBatteryData?.state_of_charge || 50;
+    const batteryCapacity = 1000; // 1 MWh
     
     let chargeRate = 0;
-    if (totalGeneration > campusLoad && currentSoC < 90) {
-      chargeRate = Math.min((totalGeneration - campusLoad) * 0.8, 200); // Charge at up to 200kW
-    } else if (totalGeneration < campusLoad && currentSoC > 25) {
-      chargeRate = -Math.min((campusLoad - totalGeneration) * 0.6, 150); // Discharge at up to 150kW
+    let gridImport = 0;
+    let gridExport = 0;
+    
+    // Step 2: Handle excess renewable energy
+    if (excessRenewable > 0) {
+      if (currentSoC < 90) {
+        // Charge battery with excess
+        chargeRate = Math.min(excessRenewable * 0.9, 200, (90 - currentSoC) * 10); // Limit charge rate
+        const remainingExcess = Math.max(0, excessRenewable - chargeRate);
+        
+        // Export remaining excess to grid
+        if (remainingExcess > 0) {
+          gridExport = remainingExcess;
+        }
+      } else {
+        // Battery full, export all excess to grid
+        gridExport = excessRenewable;
+      }
     }
+    
+    // Step 3: Handle renewable deficit
+    if (renewableDeficit > 0) {
+      if (currentSoC > 25) {
+        // Discharge battery to cover deficit
+        const maxDischarge = Math.min(renewableDeficit, 150, (currentSoC - 20) * 10); // Limit discharge
+        chargeRate = -maxDischarge;
+        const remainingDeficit = Math.max(0, renewableDeficit - maxDischarge);
+        
+        // Import remaining deficit from grid
+        if (remainingDeficit > 0) {
+          gridImport = remainingDeficit;
+        }
+      } else {
+        // Battery low, import all deficit from grid
+        gridImport = renewableDeficit;
+      }
+    }
+    
+    // Update battery SoC based on charge/discharge
+    const socChange = (chargeRate / batteryCapacity) * 100 / 60; // Per minute change
+    const newSoC = Math.max(20, Math.min(95, currentSoC + socChange));
 
-    // Grid interaction
-    const netLoad = campusLoad - totalGeneration + chargeRate;
-    const gridImport = Math.max(0, netLoad);
-    const gridExport = Math.max(0, -netLoad);
+    // Actual campus load varies slightly around target
+    const actualCampusLoad = targetCampusLoad + (Math.random() - 0.5) * 20 + timeVariation * 10;
 
     // Temperature simulation
     const baseTemp = 25 + Math.sin((hour + minute/60) * Math.PI / 12) * 15; // 10-40°C daily cycle
@@ -107,7 +166,7 @@ serve(async (req) => {
     const { error: batteryError } = await supabaseClient
       .from('battery_data')
       .insert({
-        state_of_charge: Number(currentSoC.toFixed(2)),
+        state_of_charge: Number(newSoC.toFixed(2)),
         charge_rate: Number(chargeRate.toFixed(2)),
         capacity_kwh: batteryCapacity,
         temperature_celsius: Number((temperature - 5).toFixed(2)), // Battery runs cooler
@@ -120,12 +179,13 @@ serve(async (req) => {
     const { error: loadError } = await supabaseClient
       .from('campus_load_data')
       .insert({
-        total_load_kw: Number(campusLoad.toFixed(2)),
-        hvac_load_kw: Number((campusLoad * 0.4).toFixed(2)),
-        lighting_load_kw: Number((campusLoad * 0.2).toFixed(2)),
-        equipment_load_kw: Number((campusLoad * 0.3).toFixed(2)),
-        other_load_kw: Number((campusLoad * 0.1).toFixed(2)),
-        load_forecast_kw: Number((campusLoad * 1.03).toFixed(2)) // 3% forecast increase
+        total_load_kw: Number(actualCampusLoad.toFixed(2)),
+        hvac_load_kw: Number((actualCampusLoad * 0.4).toFixed(2)),
+        lighting_load_kw: Number((actualCampusLoad * 0.2).toFixed(2)),
+        equipment_load_kw: Number((actualCampusLoad * 0.3).toFixed(2)),
+        other_load_kw: Number((actualCampusLoad * 0.1).toFixed(2)),
+        load_forecast_kw: Number((actualCampusLoad * 1.03).toFixed(2)), // 3% forecast increase
+        target_load_kw: Number(targetCampusLoad.toFixed(2))
       });
 
     if (loadError) console.error('Load data insert error:', loadError);
@@ -145,16 +205,16 @@ serve(async (req) => {
     if (gridError) console.error('Grid data insert error:', gridError);
 
     // Calculate energy mix percentages
-    const totalGen = solarPowerGenerated + windPowerGenerated + Math.abs(chargeRate < 0 ? chargeRate : 0) + gridImport;
+    const totalSupply = totalRenewableGeneration + Math.abs(chargeRate < 0 ? chargeRate : 0) + gridImport;
     
     const energyMix = {
-      solar_percentage: totalGen > 0 ? Number((solarPowerGenerated / totalGen * 100).toFixed(2)) : 0,
-      wind_percentage: totalGen > 0 ? Number((windPowerGenerated / totalGen * 100).toFixed(2)) : 0,
-      battery_percentage: totalGen > 0 ? Number((Math.abs(chargeRate < 0 ? chargeRate : 0) / totalGen * 100).toFixed(2)) : 0,
-      grid_percentage: totalGen > 0 ? Number((gridImport / totalGen * 100).toFixed(2)) : 0,
-      total_generation_kw: Number(totalGeneration.toFixed(2)),
-      total_consumption_kw: Number(campusLoad.toFixed(2)),
-      self_consumption_percentage: Number((Math.min(totalGeneration, campusLoad) / campusLoad * 100).toFixed(2))
+      solar_percentage: totalSupply > 0 ? Number((solarPowerGenerated / totalSupply * 100).toFixed(2)) : 0,
+      wind_percentage: totalSupply > 0 ? Number((windPowerGenerated / totalSupply * 100).toFixed(2)) : 0,
+      battery_percentage: totalSupply > 0 ? Number((Math.abs(chargeRate < 0 ? chargeRate : 0) / totalSupply * 100).toFixed(2)) : 0,
+      grid_percentage: totalSupply > 0 ? Number((gridImport / totalSupply * 100).toFixed(2)) : 0,
+      total_generation_kw: Number(totalRenewableGeneration.toFixed(2)),
+      total_consumption_kw: Number(actualCampusLoad.toFixed(2)),
+      self_consumption_percentage: Number((Math.min(totalRenewableGeneration, actualCampusLoad) / actualCampusLoad * 100).toFixed(2))
     };
 
     // Insert energy mix
@@ -164,21 +224,27 @@ serve(async (req) => {
 
     if (mixError) console.error('Energy mix insert error:', mixError);
 
+    // Deactivate old alerts
+    await supabaseClient
+      .from('energy_alerts')
+      .update({ is_active: false })
+      .eq('is_active', true);
+
     // Generate smart alerts based on conditions
     const alerts = [];
     
-    if (currentSoC < 30) {
+    if (newSoC < 30) {
       alerts.push({
         alert_type: 'warning',
         category: 'battery',
         title: 'Low Battery Level',
-        description: `Battery SoC is ${currentSoC.toFixed(1)}%, below recommended minimum`,
+        description: `Battery SoC is ${newSoC.toFixed(1)}%, below recommended minimum`,
         recommendation: 'Consider reducing non-critical loads or importing from grid',
         priority: 3
       });
     }
 
-    if (solarPowerGenerated > 400 && currentSoC < 80) {
+    if (solarPowerGenerated > 400 && newSoC < 80) {
       alerts.push({
         alert_type: 'success',
         category: 'optimization',
@@ -211,6 +277,28 @@ serve(async (req) => {
       });
     }
 
+    if (gridExport > 100) {
+      alerts.push({
+        alert_type: 'success',
+        category: 'grid',
+        title: 'Exporting to Grid',
+        description: `Exporting ${gridExport.toFixed(0)}kW surplus renewable energy`,
+        recommendation: 'Great! You are contributing clean energy to the grid',
+        priority: 1
+      });
+    }
+
+    if (totalRenewableGeneration >= actualCampusLoad) {
+      alerts.push({
+        alert_type: 'success',
+        category: 'energy',
+        title: '100% Renewable Coverage',
+        description: `Campus fully powered by renewables with ${(totalRenewableGeneration - actualCampusLoad).toFixed(0)}kW surplus`,
+        recommendation: 'Excellent renewable energy performance',
+        priority: 1
+      });
+    }
+
     // Insert alerts
     if (alerts.length > 0) {
       const { error: alertsError } = await supabaseClient
@@ -226,11 +314,17 @@ serve(async (req) => {
       data: {
         solar: { irradiance: solarIrradiance, power: solarPowerGenerated },
         wind: { speed: baseWindSpeed, power: windPowerGenerated },
-        battery: { soc: currentSoC, chargeRate: chargeRate },
-        campus: { load: campusLoad },
+        battery: { soc: newSoC, chargeRate: chargeRate },
+        campus: { load: actualCampusLoad, target: targetCampusLoad },
         grid: { import: gridImport, export: gridExport },
         energyMix,
-        alerts: alerts.length
+        alerts: alerts.length,
+        energyFlow: {
+          renewableToLoad,
+          excessRenewable,
+          renewableDeficit,
+          totalRenewable: totalRenewableGeneration
+        }
       }
     };
 
@@ -243,7 +337,7 @@ serve(async (req) => {
   } catch (error) {
     console.error('Error in fetch-weather-data function:', error);
     return new Response(JSON.stringify({ 
-      error: error.message,
+      error: error instanceof Error ? error.message : 'Unknown error',
       success: false 
     }), {
       status: 500,

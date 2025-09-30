@@ -14,7 +14,234 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      battery_data: {
+        Row: {
+          capacity_kwh: number
+          charge_rate: number
+          health_percentage: number
+          id: string
+          state_of_charge: number
+          temperature_celsius: number
+          timestamp: string
+        }
+        Insert: {
+          capacity_kwh?: number
+          charge_rate?: number
+          health_percentage?: number
+          id?: string
+          state_of_charge?: number
+          temperature_celsius?: number
+          timestamp?: string
+        }
+        Update: {
+          capacity_kwh?: number
+          charge_rate?: number
+          health_percentage?: number
+          id?: string
+          state_of_charge?: number
+          temperature_celsius?: number
+          timestamp?: string
+        }
+        Relationships: []
+      }
+      campus_load_data: {
+        Row: {
+          equipment_load_kw: number
+          hvac_load_kw: number
+          id: string
+          lighting_load_kw: number
+          load_forecast_kw: number
+          other_load_kw: number
+          target_load_kw: number
+          timestamp: string
+          total_load_kw: number
+        }
+        Insert: {
+          equipment_load_kw?: number
+          hvac_load_kw?: number
+          id?: string
+          lighting_load_kw?: number
+          load_forecast_kw?: number
+          other_load_kw?: number
+          target_load_kw?: number
+          timestamp?: string
+          total_load_kw?: number
+        }
+        Update: {
+          equipment_load_kw?: number
+          hvac_load_kw?: number
+          id?: string
+          lighting_load_kw?: number
+          load_forecast_kw?: number
+          other_load_kw?: number
+          target_load_kw?: number
+          timestamp?: string
+          total_load_kw?: number
+        }
+        Relationships: []
+      }
+      energy_alerts: {
+        Row: {
+          alert_type: string
+          category: string
+          description: string
+          id: string
+          is_active: boolean
+          priority: number
+          recommendation: string | null
+          timestamp: string
+          title: string
+        }
+        Insert: {
+          alert_type?: string
+          category: string
+          description: string
+          id?: string
+          is_active?: boolean
+          priority?: number
+          recommendation?: string | null
+          timestamp?: string
+          title: string
+        }
+        Update: {
+          alert_type?: string
+          category?: string
+          description?: string
+          id?: string
+          is_active?: boolean
+          priority?: number
+          recommendation?: string | null
+          timestamp?: string
+          title?: string
+        }
+        Relationships: []
+      }
+      energy_mix: {
+        Row: {
+          battery_percentage: number
+          grid_percentage: number
+          id: string
+          self_consumption_percentage: number
+          solar_percentage: number
+          timestamp: string
+          total_consumption_kw: number
+          total_generation_kw: number
+          wind_percentage: number
+        }
+        Insert: {
+          battery_percentage?: number
+          grid_percentage?: number
+          id?: string
+          self_consumption_percentage?: number
+          solar_percentage?: number
+          timestamp?: string
+          total_consumption_kw?: number
+          total_generation_kw?: number
+          wind_percentage?: number
+        }
+        Update: {
+          battery_percentage?: number
+          grid_percentage?: number
+          id?: string
+          self_consumption_percentage?: number
+          solar_percentage?: number
+          timestamp?: string
+          total_consumption_kw?: number
+          total_generation_kw?: number
+          wind_percentage?: number
+        }
+        Relationships: []
+      }
+      grid_data: {
+        Row: {
+          grid_export_kw: number
+          grid_frequency: number
+          grid_import_kw: number
+          id: string
+          timestamp: string
+          voltage_l1: number
+          voltage_l2: number
+          voltage_l3: number
+        }
+        Insert: {
+          grid_export_kw?: number
+          grid_frequency?: number
+          grid_import_kw?: number
+          id?: string
+          timestamp?: string
+          voltage_l1?: number
+          voltage_l2?: number
+          voltage_l3?: number
+        }
+        Update: {
+          grid_export_kw?: number
+          grid_frequency?: number
+          grid_import_kw?: number
+          id?: string
+          timestamp?: string
+          voltage_l1?: number
+          voltage_l2?: number
+          voltage_l3?: number
+        }
+        Relationships: []
+      }
+      solar_data: {
+        Row: {
+          cloud_cover_percentage: number
+          id: string
+          solar_irradiance: number
+          solar_power_forecast: number
+          solar_power_generated: number
+          temperature_celsius: number
+          timestamp: string
+        }
+        Insert: {
+          cloud_cover_percentage?: number
+          id?: string
+          solar_irradiance?: number
+          solar_power_forecast?: number
+          solar_power_generated?: number
+          temperature_celsius?: number
+          timestamp?: string
+        }
+        Update: {
+          cloud_cover_percentage?: number
+          id?: string
+          solar_irradiance?: number
+          solar_power_forecast?: number
+          solar_power_generated?: number
+          temperature_celsius?: number
+          timestamp?: string
+        }
+        Relationships: []
+      }
+      wind_data: {
+        Row: {
+          id: string
+          timestamp: string
+          wind_direction: number
+          wind_power_forecast: number
+          wind_power_generated: number
+          wind_speed: number
+        }
+        Insert: {
+          id?: string
+          timestamp?: string
+          wind_direction?: number
+          wind_power_forecast?: number
+          wind_power_generated?: number
+          wind_speed?: number
+        }
+        Update: {
+          id?: string
+          timestamp?: string
+          wind_direction?: number
+          wind_power_forecast?: number
+          wind_power_generated?: number
+          wind_speed?: number
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

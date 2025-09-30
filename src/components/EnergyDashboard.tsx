@@ -1,433 +1,311 @@
-import React, { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from "recharts";
-import { Sun, Wind, Battery, Zap, TrendingUp, AlertTriangle, Settings, Download, RefreshCw, Loader2, CheckCircle, Info, Gauge } from "lucide-react";
-import { useEnergyData } from "@/hooks/useEnergyData";
-import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
-import heroImage from "@/assets/renewable-energy-hero.jpg";
-
-// Mock data for demonstration
-const solarData = [
-  { time: '06:00', power: 0, forecast: 0 },
-  { time: '08:00', power: 2.5, forecast: 3.1 },
-  { time: '10:00', power: 8.2, forecast: 8.9 },
-  { time: '12:00', power: 15.3, forecast: 14.8 },
-  { time: '14:00', power: 18.7, forecast: 17.9 },
-  { time: '16:00', power: 12.4, forecast: 11.8 },
-  { time: '18:00', power: 5.1, forecast: 4.9 },
-  { time: '20:00', power: 0, forecast: 0 },
-];
-
-const windData = [
-  { time: '06:00', power: 3.2, speed: 12 },
-  { time: '08:00', power: 4.1, speed: 15 },
-  { time: '10:00', power: 2.8, speed: 10 },
-  { time: '12:00', power: 1.9, speed: 8 },
-  { time: '14:00', power: 3.5, speed: 13 },
-  { time: '16:00', power: 5.2, speed: 18 },
-  { time: '18:00', power: 6.1, speed: 21 },
-  { time: '20:00', power: 4.8, speed: 16 },
-];
-
-const energyMix = [
-  { name: 'Solar', value: 45, color: '#F59E0B' },
-  { name: 'Wind', value: 30, color: '#3B82F6' },
-  { name: 'Battery', value: 15, color: '#10B981' },
-  { name: 'Grid', value: 10, color: '#6B7280' },
-];
+import React, { useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { useEnergyData } from '@/hooks/useEnergyData';
+import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
+import { CampusLoadInput } from './CampusLoadInput';
+import { EnergyFlowDiagram } from './EnergyFlowDiagram';
+import { RefreshCw, Loader2, CheckCircle, Info, Gauge, PlayCircle, StopCircle } from 'lucide-react';
 
 export const EnergyDashboard = () => {
-  const { energyData, alerts, loading, generateNewData } = useEnergyData();
+  const { energyData, alerts, loading, error, generateNewData, refreshData } = useEnergyData();
   const { toast } = useToast();
-  const [isGenerating, setIsGenerating] = useState(false);
-  
-  const handleGenerateData = async () => {
-    setIsGenerating(true);
-    await generateNewData();
-    setIsGenerating(false);
+  const [aiResult, setAiResult] = useState<string>('');
+  const [isAutoUpdate, setIsAutoUpdate] = useState(true);
+
+  const handleAIOptimization = async () => {
+    try {
+      const { data: functionData, error: functionError } = await supabase.functions.invoke('energy-ai-forecast', {
+        body: { type: 'optimize', message: 'Provide energy optimization recommendations based on current data' }
+      });
+
+      if (functionError) throw functionError;
+
+      setAiResult(functionData.recommendation);
+      toast({
+        title: "AI Optimization Complete",
+        description: "Energy optimization recommendations generated",
+      });
+    } catch (error) {
+      console.error('Error calling AI optimization:', error);
+      toast({
+        title: "AI Optimization Failed",
+        description: "Could not generate optimization recommendations",
+        variant: "destructive",
+      });
+    }
   };
 
-  if (loading) {
+  const handleAIForecast = async () => {
+    try {
+      const { data: functionData, error: functionError } = await supabase.functions.invoke('energy-ai-forecast', {
+        body: { type: 'forecast', message: 'Generate energy forecast for the next 24 hours' }
+      });
+
+      if (functionError) throw functionError;
+
+      setAiResult(functionData.recommendation);
+      toast({
+        title: "AI Forecast Complete",
+        description: "24-hour energy forecast generated",
+      });
+    } catch (error) {
+      console.error('Error calling AI forecast:', error);
+      toast({
+        title: "AI Forecast Failed",
+        description: "Could not generate energy forecast",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const toggleAutoUpdate = () => {
+    setIsAutoUpdate(!isAutoUpdate);
+    toast({
+      title: isAutoUpdate ? "Auto-update Disabled" : "Auto-update Enabled",
+      description: isAutoUpdate ? "Manual refresh only" : "Data will update every 3 seconds",
+    });
+  };
+
+  if (loading && !energyData) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="flex items-center space-x-2">
-          <Loader2 className="h-6 w-6 animate-spin" />
-          <span>Loading energy data...</span>
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin" />
+        <span className="ml-2">Loading energy data...</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <p className="text-red-600 mb-4">{error}</p>
+          <Button onClick={refreshData}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Reload
+          </Button>
         </div>
       </div>
     );
   }
 
-  const currentTime = new Date().toLocaleTimeString();
-  
-  return (
-    <div className="min-h-screen bg-gradient-subtle">
-      {/* Hero Section */}
-      <div className="relative overflow-hidden">
-        <div 
-          className="h-64 bg-cover bg-center bg-no-repeat"
-          style={{ backgroundImage: `url(${heroImage})` }}
-        >
-          <div className="absolute inset-0 bg-gradient-primary opacity-75"></div>
-          <div className="relative z-10 flex h-full items-center justify-center text-center">
-            <div>
-              <h1 className="text-4xl font-bold text-white mb-2">
-                Rajasthan Campus Energy Management
-              </h1>
-              <p className="text-xl text-white/90">
-                Hybrid Renewable Energy Generation Solution
-              </p>
-              <Badge variant="secondary" className="mt-4">
-                Last Updated: {currentTime}
-              </Badge>
-            </div>
-          </div>
+  if (!energyData) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <p className="text-gray-600 mb-4">No energy data available</p>
+          <Button onClick={generateNewData}>
+            Generate Initial Data
+          </Button>
         </div>
       </div>
+    );
+  }
 
-      {/* Main Dashboard */}
-      <div className="container mx-auto px-4 py-8">
-        
-        {/* Control Panel */}
-        <div className="flex justify-between items-center mb-6">
-          <Button 
-            onClick={handleGenerateData}
-            disabled={isGenerating}
-            className="bg-primary hover:bg-primary/90"
-          >
-            {isGenerating ? (
+  return (
+    <div className="p-6 max-w-7xl mx-auto space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold">Energy Management Dashboard</h1>
+          <p className="text-gray-600">Real-time renewable energy monitoring with intelligent flow management</p>
+        </div>
+        <div className="flex gap-2">
+          <Button onClick={toggleAutoUpdate} variant="outline">
+            {isAutoUpdate ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Generating...
+                <StopCircle className="h-4 w-4 mr-2" />
+                Stop Auto-Update
               </>
             ) : (
               <>
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Generate New Data
+                <PlayCircle className="h-4 w-4 mr-2" />
+                Start Auto-Update
               </>
             )}
           </Button>
+          <Button onClick={generateNewData} variant="outline">
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Generate Data
+          </Button>
+          <Button onClick={handleAIOptimization}>
+            AI Optimization
+          </Button>
+          <Button onClick={handleAIForecast} variant="secondary">
+            AI Forecast
+          </Button>
         </div>
-        
-        {/* Key Metrics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card className="shadow-soft hover:shadow-strong transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Generation</CardTitle>
-              <Sun className="h-4 w-4 text-accent" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">24.7 kW</div>
-              <p className="text-xs text-muted-foreground">
-                <TrendingUp className="inline h-3 w-3 mr-1" />
-                +12% from yesterday
-              </p>
-            </CardContent>
-          </Card>
+      </div>
 
-          <Card className="shadow-soft hover:shadow-strong transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Battery Status</CardTitle>
-              <Battery className="h-4 w-4 text-success" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">78%</div>
-              <Progress value={78} className="mt-2" />
-              <p className="text-xs text-muted-foreground mt-2">
-                Charging • 2.5 kW
-              </p>
-            </CardContent>
-          </Card>
+      {/* Campus Load Input */}
+      <CampusLoadInput 
+        currentLoad={energyData.campus.totalLoad}
+        targetLoad={energyData.campus.targetLoad}
+      />
 
-          <Card className="shadow-soft hover:shadow-strong transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Grid Dependency</CardTitle>
-              <Zap className="h-4 w-4 text-warning" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">18%</div>
-              <p className="text-xs text-muted-foreground">
-                -65% reduction this month
-              </p>
-            </CardContent>
-          </Card>
+      {/* Energy Flow Diagram */}
+      <EnergyFlowDiagram
+        solarPower={energyData.solar.current}
+        windPower={energyData.wind.current}
+        batteryCharge={energyData.battery.chargeRate}
+        batterySOC={energyData.battery.soc}
+        campusLoad={energyData.campus.totalLoad}
+        gridImport={energyData.grid.import}
+        gridExport={energyData.grid.export}
+      />
 
-          <Card className="shadow-soft hover:shadow-strong transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Campus Load</CardTitle>
-              <Settings className="h-4 w-4 text-secondary" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">19.8 kW</div>
-              <p className="text-xs text-muted-foreground">
-                Peak: 24.2 kW at 14:30
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Main Content Tabs */}
-        <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="solar">Solar</TabsTrigger>
-            <TabsTrigger value="wind">Wind</TabsTrigger>
-            <TabsTrigger value="optimization">Optimization</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="overview" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              
-              {/* Energy Mix Chart */}
-              <Card className="shadow-soft">
-                <CardHeader>
-                  <CardTitle>Energy Mix Distribution</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <PieChart>
-                      <Pie
-                        data={energyMix}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={60}
-                        outerRadius={100}
-                        paddingAngle={5}
-                        dataKey="value"
-                      >
-                        {energyMix.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className="grid grid-cols-2 gap-2 mt-4">
-                    {energyMix.map((item) => (
-                      <div key={item.name} className="flex items-center space-x-2">
-                        <div 
-                          className="w-3 h-3 rounded" 
-                          style={{ backgroundColor: item.color }}
-                        ></div>
-                        <span className="text-sm">{item.name}: {item.value}%</span>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Alerts & Recommendations */}
-              <Card className="shadow-soft">
-                <CardHeader>
-                  <CardTitle>Alerts & Recommendations</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-start space-x-3 p-3 bg-success/10 rounded-lg border-l-4 border-success">
-                    <TrendingUp className="h-5 w-5 text-success mt-0.5" />
-                    <div>
-                      <p className="font-medium text-success">Optimal Solar Conditions</p>
-                      <p className="text-sm text-muted-foreground">
-                        Peak solar generation expected 12:00-15:00. Consider shifting high-load operations.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start space-x-3 p-3 bg-warning/10 rounded-lg border-l-4 border-warning">
-                    <AlertTriangle className="h-5 w-5 text-warning mt-0.5" />
-                    <div>
-                      <p className="font-medium text-warning">Battery Optimization</p>
-                      <p className="text-sm text-muted-foreground">
-                        Start battery charging at 11:00 AM to maximize solar utilization.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start space-x-3 p-3 bg-secondary/10 rounded-lg border-l-4 border-secondary">
-                    <Wind className="h-5 w-5 text-secondary mt-0.5" />
-                    <div>
-                      <p className="font-medium text-secondary">Wind Forecast</p>
-                      <p className="text-sm text-muted-foreground">
-                        Strong wind expected after 16:00. Wind generation will peak at 18:00.
-                      </p>
-                    </div>
-                  </div>
-
-                  <Button variant="outline" className="w-full">
-                    <Settings className="h-4 w-4 mr-2" />
-                    Configure Alert Thresholds
-                  </Button>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="solar" className="space-y-6">
-            <Card className="shadow-soft">
-              <CardHeader>
-                <CardTitle>Solar Power Generation & Forecast</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={400}>
-                  <LineChart data={solarData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="time" />
-                    <YAxis label={{ value: 'Power (kW)', angle: -90, position: 'insideLeft' }} />
-                    <Tooltip />
-                    <Line 
-                      type="monotone" 
-                      dataKey="power" 
-                      stroke="hsl(var(--accent))" 
-                      strokeWidth={3}
-                      name="Current Generation"
-                    />
-                    <Line 
-                      type="monotone" 
-                      dataKey="forecast" 
-                      stroke="hsl(var(--accent))" 
-                      strokeWidth={2}
-                      strokeDasharray="5 5"
-                      name="Forecast"
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="wind" className="space-y-6">
-            <Card className="shadow-soft">
-              <CardHeader>
-                <CardTitle>Wind Power Generation & Speed</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={400}>
-                  <BarChart data={windData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="time" />
-                    <YAxis yAxisId="left" label={{ value: 'Power (kW)', angle: -90, position: 'insideLeft' }} />
-                    <YAxis yAxisId="right" orientation="right" label={{ value: 'Speed (m/s)', angle: 90, position: 'insideRight' }} />
-                    <Tooltip />
-                    <Bar yAxisId="left" dataKey="power" fill="hsl(var(--secondary))" name="Wind Power (kW)" />
-                    <Line yAxisId="right" type="monotone" dataKey="speed" stroke="hsl(var(--primary))" name="Wind Speed (m/s)" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="optimization" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              
-              {/* Battery Schedule */}
-              <Card className="shadow-soft">
-                <CardHeader>
-                  <CardTitle>Battery Optimization Schedule</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center p-3 bg-success/10 rounded-lg">
-                      <div>
-                        <p className="font-medium">Charge Window</p>
-                        <p className="text-sm text-muted-foreground">11:00 - 15:00</p>
-                      </div>
-                      <Badge variant="default">Active</Badge>
-                    </div>
-                    
-                    <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
-                      <div>
-                        <p className="font-medium">Discharge Window</p>
-                        <p className="text-sm text-muted-foreground">18:00 - 22:00</p>
-                      </div>
-                      <Badge variant="outline">Scheduled</Badge>
-                    </div>
-                  </div>
-
-                  <Button className="w-full">
-                    Update Schedule
-                  </Button>
-                </CardContent>
-              </Card>
-
-              {/* Load Shifting Recommendations */}
-              <Card className="shadow-soft">
-                <CardHeader>
-                  <CardTitle>Load Shifting Opportunities</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-3">
-                    <div className="p-3 border rounded-lg">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="font-medium">HVAC Systems</p>
-                          <p className="text-sm text-muted-foreground">Shift cooling load to 12:00-14:00</p>
-                        </div>
-                        <Badge>2.5 kW</Badge>
-                      </div>
-                    </div>
-                    
-                    <div className="p-3 border rounded-lg">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="font-medium">Workshop Equipment</p>
-                          <p className="text-sm text-muted-foreground">Schedule for 13:00-16:00 window</p>
-                        </div>
-                        <Badge>1.8 kW</Badge>
-                      </div>
-                    </div>
-
-                    <div className="p-3 border rounded-lg">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="font-medium">Water Heating</p>
-                          <p className="text-sm text-muted-foreground">Optimize for solar peak hours</p>
-                        </div>
-                        <Badge>3.2 kW</Badge>
-                      </div>
-                    </div>
-                  </div>
-
-                  <Button variant="outline" className="w-full">
-                    Apply Recommendations
-                  </Button>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-        </Tabs>
-
-        {/* Export Controls */}
-        <Card className="shadow-soft mt-8">
-          <CardHeader>
-            <CardTitle>Data Export & Reports</CardTitle>
+      {/* Key Metrics */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Solar Power</CardTitle>
+            <div className="text-2xl">☀️</div>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-wrap gap-4">
-              <Button variant="outline">
-                <Download className="h-4 w-4 mr-2" />
-                Export Daily Report
-              </Button>
-              <Button variant="outline">
-                <Download className="h-4 w-4 mr-2" />
-                Monthly Analytics
-              </Button>
-              <Button variant="outline">
-                <Download className="h-4 w-4 mr-2" />
-                Carbon Footprint Summary
-              </Button>
-              <Button variant="outline">
-                <Download className="h-4 w-4 mr-2" />
-                Cost Savings Report
-              </Button>
+            <div className="text-2xl font-bold">{energyData.solar.current.toFixed(1)} kW</div>
+            <p className="text-xs text-muted-foreground">
+              Irradiance: {energyData.solar.irradiance.toFixed(0)} W/m²
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Wind Power</CardTitle>
+            <div className="text-2xl">💨</div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{energyData.wind.current.toFixed(1)} kW</div>
+            <p className="text-xs text-muted-foreground">
+              Speed: {energyData.wind.speed.toFixed(1)} m/s
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Battery</CardTitle>
+            <div className="text-2xl">🔋</div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{energyData.battery.soc.toFixed(1)}%</div>
+            <p className="text-xs text-muted-foreground">
+              {energyData.battery.chargeRate > 0 ? 'Charging' : energyData.battery.chargeRate < 0 ? 'Discharging' : 'Idle'}: {Math.abs(energyData.battery.chargeRate).toFixed(1)} kW
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Grid Status</CardTitle>
+            <div className="text-2xl">⚡</div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {energyData.grid.import > 0 ? `+${energyData.grid.import.toFixed(1)}` : 
+               energyData.grid.export > 0 ? `-${energyData.grid.export.toFixed(1)}` : '0.0'} kW
             </div>
+            <p className="text-xs text-muted-foreground">
+              {energyData.grid.import > 0 ? 'Importing' : energyData.grid.export > 0 ? 'Exporting' : 'Balanced'}
+            </p>
           </CardContent>
         </Card>
       </div>
+
+      {/* Energy Mix */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Current Energy Mix</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-yellow-600">{energyData.mix.solar.toFixed(1)}%</div>
+              <p className="text-sm text-muted-foreground">Solar</p>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-blue-600">{energyData.mix.wind.toFixed(1)}%</div>
+              <p className="text-sm text-muted-foreground">Wind</p>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-green-600">{energyData.mix.battery.toFixed(1)}%</div>
+              <p className="text-sm text-muted-foreground">Battery</p>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-gray-600">{energyData.mix.grid.toFixed(1)}%</div>
+              <p className="text-sm text-muted-foreground">Grid</p>
+            </div>
+          </div>
+          <div className="mt-4 text-center">
+            <Badge variant="secondary">
+              Self-consumption: {energyData.mix.selfConsumption.toFixed(1)}%
+            </Badge>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Live Alerts & Recommendations */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Info className="h-5 w-5" />
+            Live Alerts & Recommendations
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {alerts.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <CheckCircle className="h-12 w-12 mx-auto mb-4 text-green-500" />
+              <p>All systems operating normally</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {alerts.map((alert, index) => (
+                <div
+                  key={index}
+                  className={`p-4 rounded-lg border-l-4 ${
+                    alert.type === 'success' ? 'bg-green-50 border-green-500' :
+                    alert.type === 'warning' ? 'bg-yellow-50 border-yellow-500' :
+                    alert.type === 'critical' ? 'bg-red-50 border-red-500' :
+                    'bg-blue-50 border-blue-500'
+                  }`}
+                >
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h4 className="font-semibold text-sm">{alert.title}</h4>
+                      <p className="text-sm text-muted-foreground mt-1">{alert.description}</p>
+                      {alert.recommendation && (
+                        <p className="text-sm font-medium mt-2 text-blue-700">
+                          💡 {alert.recommendation}
+                        </p>
+                      )}
+                    </div>
+                    <Badge variant="outline" className="ml-4">
+                      {alert.category}
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* AI Results */}
+      {aiResult && (
+        <Card>
+          <CardHeader>
+            <CardTitle>AI Analysis Results</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="bg-secondary/10 p-4 rounded-lg">
+              <p className="whitespace-pre-wrap">{aiResult}</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 };

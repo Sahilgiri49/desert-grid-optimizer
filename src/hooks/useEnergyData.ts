@@ -27,6 +27,7 @@ export interface EnergyData {
     lightingLoad: number;
     equipmentLoad: number;
     forecast: number;
+    targetLoad: number;
   };
   grid: {
     import: number;
@@ -100,7 +101,8 @@ export const useEnergyData = () => {
         hvac_load_kw: 120,
         lighting_load_kw: 60,
         equipment_load_kw: 90,
-        load_forecast_kw: 310
+        load_forecast_kw: 310,
+        target_load_kw: 300
       };
 
       const gridData = gridResult.data || {
@@ -142,7 +144,8 @@ export const useEnergyData = () => {
           hvacLoad: campusData.hvac_load_kw || 0,
           lightingLoad: campusData.lighting_load_kw || 0,
           equipmentLoad: campusData.equipment_load_kw || 0,
-          forecast: campusData.load_forecast_kw || 0
+          forecast: campusData.load_forecast_kw || 0,
+          targetLoad: campusData.target_load_kw || 300
         },
         grid: {
           import: gridData.grid_import_kw || 0,
@@ -237,14 +240,30 @@ export const useEnergyData = () => {
         () => fetchLatestData()
       ).subscribe(),
 
+      supabase.channel('campus_changes').on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'campus_load_data' }, 
+        () => fetchLatestData()
+      ).subscribe(),
+
+      supabase.channel('grid_changes').on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'grid_data' }, 
+        () => fetchLatestData()
+      ).subscribe(),
+
       supabase.channel('alerts_changes').on('postgres_changes', 
         { event: '*', schema: 'public', table: 'energy_alerts' }, 
         () => fetchLatestData()
       ).subscribe(),
     ];
 
+    // Auto-generate data every 3 seconds for real-time effect
+    const interval = setInterval(() => {
+      generateNewData();
+    }, 3000);
+
     return () => {
       channels.forEach(channel => supabase.removeChannel(channel));
+      clearInterval(interval);
     };
   }, []);
 
