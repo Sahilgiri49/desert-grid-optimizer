@@ -59,6 +59,7 @@ export const useEnergyData = () => {
   const [alerts, setAlerts] = useState<EnergyAlert[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [autoUpdate, setAutoUpdate] = useState(true);
   const { toast } = useToast();
 
   const fetchLatestData = async () => {
@@ -256,22 +257,24 @@ export const useEnergyData = () => {
       ).subscribe(),
     ];
 
-    // Auto-generate data every 3 seconds for real-time effect
-    const interval = setInterval(() => {
+    // Auto-generate data every 3 seconds for real-time effect (only if autoUpdate is true)
+    const interval = autoUpdate ? setInterval(() => {
       generateNewData();
-    }, 3000);
+    }, 3000) : null;
 
     return () => {
       channels.forEach(channel => supabase.removeChannel(channel));
-      clearInterval(interval);
+      if (interval) clearInterval(interval);
     };
-  }, []);
+  }, [autoUpdate]);
 
   return {
     energyData,
     alerts,
     loading,
     error,
+    autoUpdate,
+    setAutoUpdate,
     generateNewData,
     refreshData: fetchLatestData
   };

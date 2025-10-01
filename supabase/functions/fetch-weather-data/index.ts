@@ -17,9 +17,10 @@ serve(async (req) => {
   }
 
   try {
+    // Use service role key for inserting data
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
     console.log('Fetching weather and generating energy data...');
@@ -224,11 +225,18 @@ serve(async (req) => {
 
     if (mixError) console.error('Energy mix insert error:', mixError);
 
-    // Deactivate old alerts
-    await supabaseClient
+    // Deactivate old alerts (mark all as inactive)
+    const { data: existingAlerts } = await supabaseClient
       .from('energy_alerts')
-      .update({ is_active: false })
+      .select('id')
       .eq('is_active', true);
+
+    if (existingAlerts && existingAlerts.length > 0) {
+      await supabaseClient
+        .from('energy_alerts')
+        .update({ is_active: false })
+        .in('id', existingAlerts.map(a => a.id));
+    }
 
     // Generate smart alerts based on conditions
     const alerts = [];

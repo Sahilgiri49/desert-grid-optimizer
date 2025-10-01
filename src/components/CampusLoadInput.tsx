@@ -29,13 +29,40 @@ export const CampusLoadInput: React.FC<CampusLoadInputProps> = ({ currentLoad, t
 
     setLoading(true);
     try {
-      const { error } = await supabase
+      // Get the most recent record first
+      const { data: latestData, error: fetchError } = await supabase
         .from('campus_load_data')
-        .update({ target_load_kw: newTargetLoad })
+        .select('id')
         .order('timestamp', { ascending: false })
-        .limit(1);
+        .limit(1)
+        .maybeSingle();
 
-      if (error) throw error;
+      if (fetchError) throw fetchError;
+
+      if (latestData) {
+        // Update existing record with WHERE clause
+        const { error: updateError } = await supabase
+          .from('campus_load_data')
+          .update({ target_load_kw: newTargetLoad })
+          .eq('id', latestData.id);
+
+        if (updateError) throw updateError;
+      } else {
+        // Insert new record if none exists
+        const { error: insertError } = await supabase
+          .from('campus_load_data')
+          .insert({
+            target_load_kw: newTargetLoad,
+            total_load_kw: 300,
+            hvac_load_kw: 120,
+            lighting_load_kw: 60,
+            equipment_load_kw: 90,
+            other_load_kw: 30,
+            load_forecast_kw: 310,
+          });
+
+        if (insertError) throw insertError;
+      }
 
       toast({
         title: "Target Load Updated",

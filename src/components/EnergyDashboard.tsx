@@ -10,20 +10,21 @@ import { EnergyFlowDiagram } from './EnergyFlowDiagram';
 import { RefreshCw, Loader2, CheckCircle, Info, Gauge, PlayCircle, StopCircle } from 'lucide-react';
 
 export const EnergyDashboard = () => {
-  const { energyData, alerts, loading, error, generateNewData, refreshData } = useEnergyData();
+  const { energyData, alerts, loading, error, autoUpdate, setAutoUpdate, generateNewData, refreshData } = useEnergyData();
   const { toast } = useToast();
   const [aiResult, setAiResult] = useState<string>('');
-  const [isAutoUpdate, setIsAutoUpdate] = useState(true);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const handleAIOptimization = async () => {
     try {
+      setIsGenerating(true);
       const { data: functionData, error: functionError } = await supabase.functions.invoke('energy-ai-forecast', {
-        body: { type: 'optimize', message: 'Provide energy optimization recommendations based on current data' }
+        body: { type: 'optimize' }
       });
 
       if (functionError) throw functionError;
 
-      setAiResult(functionData.recommendation);
+      setAiResult(functionData.forecast || 'No recommendations available');
       toast({
         title: "AI Optimization Complete",
         description: "Energy optimization recommendations generated",
@@ -32,21 +33,24 @@ export const EnergyDashboard = () => {
       console.error('Error calling AI optimization:', error);
       toast({
         title: "AI Optimization Failed",
-        description: "Could not generate optimization recommendations",
+        description: error instanceof Error ? error.message : "Could not generate optimization recommendations",
         variant: "destructive",
       });
+    } finally {
+      setIsGenerating(false);
     }
   };
 
   const handleAIForecast = async () => {
     try {
+      setIsGenerating(true);
       const { data: functionData, error: functionError } = await supabase.functions.invoke('energy-ai-forecast', {
-        body: { type: 'forecast', message: 'Generate energy forecast for the next 24 hours' }
+        body: { type: 'forecast' }
       });
 
       if (functionError) throw functionError;
 
-      setAiResult(functionData.recommendation);
+      setAiResult(functionData.forecast || 'No forecast available');
       toast({
         title: "AI Forecast Complete",
         description: "24-hour energy forecast generated",
@@ -55,18 +59,18 @@ export const EnergyDashboard = () => {
       console.error('Error calling AI forecast:', error);
       toast({
         title: "AI Forecast Failed",
-        description: "Could not generate energy forecast",
+        description: error instanceof Error ? error.message : "Could not generate energy forecast",
         variant: "destructive",
       });
+    } finally {
+      setIsGenerating(false);
     }
   };
 
-  const toggleAutoUpdate = () => {
-    setIsAutoUpdate(!isAutoUpdate);
-    toast({
-      title: isAutoUpdate ? "Auto-update Disabled" : "Auto-update Enabled",
-      description: isAutoUpdate ? "Manual refresh only" : "Data will update every 3 seconds",
-    });
+  const handleManualRefresh = async () => {
+    setIsGenerating(true);
+    await generateNewData();
+    setIsGenerating(false);
   };
 
   if (loading && !energyData) {
@@ -113,8 +117,11 @@ export const EnergyDashboard = () => {
           <p className="text-gray-600">Real-time renewable energy monitoring with intelligent flow management</p>
         </div>
         <div className="flex gap-2">
-          <Button onClick={toggleAutoUpdate} variant="outline">
-            {isAutoUpdate ? (
+          <Button 
+            onClick={() => setAutoUpdate(!autoUpdate)} 
+            variant={autoUpdate ? "default" : "outline"}
+          >
+            {autoUpdate ? (
               <>
                 <StopCircle className="h-4 w-4 mr-2" />
                 Stop Auto-Update
@@ -126,14 +133,25 @@ export const EnergyDashboard = () => {
               </>
             )}
           </Button>
-          <Button onClick={generateNewData} variant="outline">
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Generate Data
+          <Button onClick={handleManualRefresh} variant="outline" disabled={isGenerating}>
+            {isGenerating ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Updating...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Generate Data
+              </>
+            )}
           </Button>
-          <Button onClick={handleAIOptimization}>
+          <Button onClick={handleAIOptimization} disabled={isGenerating}>
+            {isGenerating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
             AI Optimization
           </Button>
-          <Button onClick={handleAIForecast} variant="secondary">
+          <Button onClick={handleAIForecast} variant="secondary" disabled={isGenerating}>
+            {isGenerating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
             AI Forecast
           </Button>
         </div>

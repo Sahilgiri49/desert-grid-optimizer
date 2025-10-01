@@ -75,7 +75,7 @@ serve(async (req) => {
     let systemPrompt = '';
     let userPrompt = '';
 
-    if (type === 'optimization') {
+    if (type === 'optimize') {
       systemPrompt = `You are an AI energy optimization expert for a renewable energy campus in Rajasthan, India. 
       Analyze the current energy data and provide actionable optimization recommendations.
       Focus on maximizing renewable energy utilization, optimizing battery usage, and minimizing grid dependency.
@@ -109,7 +109,7 @@ serve(async (req) => {
       Provide hourly predictions and key insights for energy planning.`;
     }
 
-    // Call Lovable AI for analysis
+    // Call Lovable AI with correct format
     const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -123,7 +123,6 @@ serve(async (req) => {
           { role: 'user', content: userPrompt }
         ],
         max_tokens: 800,
-        temperature: 0.7
       }),
     });
 
