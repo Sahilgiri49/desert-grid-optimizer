@@ -7,12 +7,14 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { CampusLoadInput } from './CampusLoadInput';
 import { EnergyFlowDiagram } from './EnergyFlowDiagram';
+import { AIOptimizationResults } from './AIOptimizationResults';
 import { RefreshCw, Loader2, CheckCircle, Info, Gauge, PlayCircle, StopCircle } from 'lucide-react';
 
 export const EnergyDashboard = () => {
   const { energyData, alerts, loading, error, autoUpdate, setAutoUpdate, generateNewData, refreshData } = useEnergyData();
   const { toast } = useToast();
-  const [aiResult, setAiResult] = useState<string>('');
+  const [aiResult, setAiResult] = useState<any>(null);
+  const [aiType, setAiType] = useState<'optimize' | 'forecast'>('optimize');
   const [isGenerating, setIsGenerating] = useState(false);
 
   const handleAIOptimization = async () => {
@@ -24,7 +26,8 @@ export const EnergyDashboard = () => {
 
       if (functionError) throw functionError;
 
-      setAiResult(functionData.forecast || 'No recommendations available');
+      setAiResult(functionData);
+      setAiType('optimize');
       toast({
         title: "AI Optimization Complete",
         description: "Energy optimization recommendations generated",
@@ -50,7 +53,8 @@ export const EnergyDashboard = () => {
 
       if (functionError) throw functionError;
 
-      setAiResult(functionData.forecast || 'No forecast available');
+      setAiResult(functionData);
+      setAiType('forecast');
       toast({
         title: "AI Forecast Complete",
         description: "24-hour energy forecast generated",
@@ -311,18 +315,9 @@ export const EnergyDashboard = () => {
         </CardContent>
       </Card>
 
-      {/* AI Results */}
+      {/* AI Results with Charts and Analysis */}
       {aiResult && (
-        <Card>
-          <CardHeader>
-            <CardTitle>AI Analysis Results</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="bg-secondary/10 p-4 rounded-lg">
-              <p className="whitespace-pre-wrap">{aiResult}</p>
-            </div>
-          </CardContent>
-        </Card>
+        <AIOptimizationResults data={aiResult} type={aiType} />
       )}
     </div>
   );
